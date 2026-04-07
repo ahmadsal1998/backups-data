@@ -1,0 +1,38 @@
+# Triggered from the dashboard (Vercel API) or manually in GitHub (workflow_dispatch).
+name: Database restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      restore_file_id:
+        description: Google Drive file id of the .sql.zip backup
+        required: true
+        type: string
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install PostgreSQL client and unzip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client unzip
+
+      - name: Restore from Drive backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          RESTORE_FILE_ID: ${{ inputs.restore_file_id }}
+        run: npx tsx scripts/restore-pipeline.ts

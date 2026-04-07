@@ -1,0 +1,38 @@
+# Runs every hour; actual spacing is enforced by BACKUP_INTERVAL (see scripts/backup-pipeline.ts).
+# Configure BACKUP_INTERVAL and RETENTION_DAYS as repository Variables (Settings → Secrets and variables → Actions → Variables).
+name: Database backup
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install PostgreSQL client and zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client zip unzip
+
+      - name: Run backup pipeline
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          BACKUP_INTERVAL: ${{ vars.BACKUP_INTERVAL }}
+          RETENTION_DAYS: ${{ vars.RETENTION_DAYS }}
+        run: npx tsx scripts/backup-pipeline.ts

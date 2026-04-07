@@ -57,12 +57,20 @@ async function main() {
   const drive = getDrive();
   const now = new Date();
 
+  const forceBackup =
+    process.env.FORCE_BACKUP === "1" ||
+    process.env.FORCE_BACKUP?.toLowerCase() === "true";
+
   const existingMeta = await readBackupMetadata(drive, folderId);
   const lastOk = existingMeta?.lastSuccessfulBackupAt
     ? new Date(existingMeta.lastSuccessfulBackupAt)
     : null;
 
-  if (!shouldRunBackup(lastOk, interval, now)) {
+  if (forceBackup) {
+    log.info("backup_forced", { interval });
+  }
+
+  if (!forceBackup && !shouldRunBackup(lastOk, interval, now)) {
     log.info("backup_skipped_interval", { interval, lastOk: lastOk?.toISOString() });
     const skipped: BackupMetadata = {
       lastSuccessfulBackupAt: existingMeta?.lastSuccessfulBackupAt ?? null,

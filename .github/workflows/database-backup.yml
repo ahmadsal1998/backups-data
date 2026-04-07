@@ -6,6 +6,15 @@ on:
   schedule:
     - cron: "0 * * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Ignore BACKUP_INTERVAL and run a full backup (snapshot)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   backup:
@@ -35,4 +44,5 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           BACKUP_INTERVAL: ${{ vars.BACKUP_INTERVAL }}
           RETENTION_DAYS: ${{ vars.RETENTION_DAYS }}
+          FORCE_BACKUP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' && '1' || '' }}
         run: npx tsx scripts/backup-pipeline.ts

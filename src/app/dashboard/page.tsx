@@ -5,6 +5,7 @@ import {
   type BackupMetadata,
 } from "@/lib/gdrive";
 import { BackupActions } from "./backup-actions";
+import { ManualBackup } from "./manual-backup";
 
 export default async function DashboardPage() {
   const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
@@ -50,6 +51,10 @@ export default async function DashboardPage() {
           ).
         </p>
       </div>
+
+      <ManualBackup
+        lastSuccessfulBackupAt={meta?.lastSuccessfulBackupAt ?? null}
+      />
 
       {loadError ? (
         <div

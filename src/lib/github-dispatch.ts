@@ -37,3 +37,44 @@ export async function dispatchRestoreWorkflow(fileId: string): Promise<void> {
 
   log.info("github_dispatch_ok", { workflow, ref, fileId });
 }
+
+export async function dispatchBackupWorkflow(options?: {
+  force?: boolean;
+}): Promise<void> {
+  const token = process.env.GITHUB_PAT?.trim();
+  const owner = process.env.GITHUB_OWNER?.trim();
+  const repo = process.env.GITHUB_REPO?.trim();
+  const workflow =
+    process.env.GITHUB_BACKUP_WORKFLOW_FILE?.trim() ||
+    "database-backup.yml";
+  const ref = process.env.GITHUB_REF?.trim() || "main";
+
+  if (!token || !owner || !repo) {
+    throw new Error(
+      "GitHub backup is not configured (GITHUB_PAT, GITHUB_OWNER, GITHUB_REPO)",
+    );
+  }
+
+  const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${encodeURIComponent(workflow)}/dispatches`;
+  const force = options?.force !== false;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({
+      ref,
+      inputs: force ? { force: "true" } : { force: "false" },
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    log.error("github_backup_dispatch_failed", { status: res.status, body: text });
+    throw new Error(`GitHub API error ${res.status}`);
+  }
+
+  log.info("github_backup_dispatch_ok", { workflow, ref, force });
+}

@@ -1,5 +1,14 @@
 # Runs every hour; actual spacing is enforced by BACKUP_INTERVAL (see scripts/backup-pipeline.ts).
 # Configure BACKUP_INTERVAL and RETENTION_DAYS as repository Variables (Settings → Secrets and variables → Actions → Variables).
+#
+# Secrets troubleshooting (if you see "Missing required env: GOOGLE_DRIVE_FOLDER_ID" in CI):
+# - Repository secrets: Settings → Secrets and variables → Actions → Secrets (this repo).
+# - Organization secrets: must explicitly allow this repository (Org → Secrets → Repository access).
+# - Environment secrets: only apply if this job sets `environment:`. This workflow does not use
+#   GitHub Environments; secrets belong at repository (or org) level unless you add `environment:`.
+# - Forks: workflows from a fork do not receive secrets from the upstream repo; add secrets on the fork.
+# - Scheduled runs and workflow_dispatch both receive the same repository secrets (if the run is on this repo).
+#
 name: Database backup
 
 on:
@@ -21,6 +30,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Job-level env: same values for every step (avoids per-step scoping surprises; matches scheduled + dispatch).
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+      BACKUP_INTERVAL: ${{ vars.BACKUP_INTERVAL }}
+      RETENTION_DAYS: ${{ vars.RETENTION_DAYS }}
+      FORCE_BACKUP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,12 +54,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client zip unzip
 
+      # Safe diagnostics: lengths only (never print secret values; GitHub also masks them in logs).
+      - name: Validate required secrets (debug)
+        run: |
+          set -euo pipefail
+          echo "event_name=${{ github.event_name }}"
+          echo "ref=${{ github.ref }}"
+          echo "repository=${{ github.repository }}"
+          echo "GOOGLE_DRIVE_FOLDER_ID length: ${#GOOGLE_DRIVE_FOLDER_ID}"
+          echo "DATABASE_URL length: ${#DATABASE_URL}"
+          echo "GOOGLE_SERVICE_ACCOUNT_JSON length: ${#GOOGLE_SERVICE_ACCOUNT_JSON}"
+          echo "BACKUP_INTERVAL (var) length: ${#BACKUP_INTERVAL}"
+          echo "RETENTION_DAYS (var) length: ${#RETENTION_DAYS}"
+          echo "FORCE_BACKUP length: ${#FORCE_BACKUP}"
+          missing=0
+          if [ "${#GOOGLE_DRIVE_FOLDER_ID}" -eq 0 ]; then
+            echo "::error title=Missing secret::GOOGLE_DRIVE_FOLDER_ID is empty or not available to this workflow run. Add repository secret GOOGLE_DRIVE_FOLDER_ID (or grant org secret access to this repo)."
+            missing=1
+          fi
+          if [ "${#DATABASE_URL}" -eq 0 ]; then
+            echo "::error title=Missing secret::DATABASE_URL is empty or not available to this workflow run."
+            missing=1
+          fi
+          if [ "${#GOOGLE_SERVICE_ACCOUNT_JSON}" -eq 0 ]; then
+            echo "::error title=Missing secret::GOOGLE_SERVICE_ACCOUNT_JSON is empty or not available to this workflow run."
+            missing=1
+          fi
+          exit "$missing"
+
       - name: Run backup pipeline
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          BACKUP_INTERVAL: ${{ vars.BACKUP_INTERVAL }}
-          RETENTION_DAYS: ${{ vars.RETENTION_DAYS }}
-          FORCE_BACKUP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' && '1' || '' }}
         run: npx tsx scripts/backup-pipeline.ts
